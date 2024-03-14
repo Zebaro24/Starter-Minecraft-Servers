@@ -1,0 +1,77 @@
+services:
+
+  # ---------------------------------------------------------------------------
+  # Telegram bot — manages all MC containers via Docker socket
+  # ---------------------------------------------------------------------------
+  bot:
+    image: ghcr.io/${OWNER_NAME:-owner}/starter-minecraft-servers:${VERSION:-latest}
+    build: .
+    container_name: mc-manager-bot
+    restart: unless-stopped
+    env_file: .env
+    networks:
+      - mc-net
+    volumes:
+      # Mount the Docker socket so the bot can start/stop MC containers
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - mc-stoneblock4
+
+  # ---------------------------------------------------------------------------
+  # StoneBlock 4 (FTB modpack)
+  # To add another server: copy this block, change the service name, ports,
+  # FTB_MODPACK_ID, and update app/config/servers.py accordingly.
+  # ---------------------------------------------------------------------------
+  mc-stoneblock4:
+    image: itzg/minecraft-server
+    container_name: mc-stoneblock4
+    restart: unless-stopped
+    networks:
+      - mc-net
+    ports:
+      - "25565:25565"
+    environment:
+      EULA: "TRUE"
+      TYPE: "FTBA"
+      FTB_MODPACK_ID: "130"
+      FTB_MODPACK_VERSION_ID: "100180"
+      MEMORY: "7G"
+      JAVA_VERSION: "21"
+      # RCON — needed for sending in-game commands from the bot
+      ENABLE_RCON: "true"
+      RCON_PORT: "25575"
+      RCON_PASSWORD: "${RCON_PASSWORD}"
+    volumes:
+      - ./data/stoneblock4:/data
+    healthcheck:
+      test: mc-health
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 10m
+
+  # ---------------------------------------------------------------------------
+  # Example: how to add a second server
+  # ---------------------------------------------------------------------------
+  # mc-survival:
+  #   image: itzg/minecraft-server
+  #   container_name: mc-survival
+  #   restart: unless-stopped
+  #   networks:
+  #     - mc-net
+  #   ports:
+  #     - "25566:25565"
+  #   environment:
+  #     EULA: "TRUE"
+  #     TYPE: "PAPER"
+  #     VERSION: "1.21"
+  #     MEMORY: "4G"
+  #     ENABLE_RCON: "true"
+  #     RCON_PORT: "25575"
+  #     RCON_PASSWORD: "${RCON_PASSWORD}"
+  #   volumes:
+  #     - ./data/survival:/data
+
+networks:
+  mc-net:
+    driver: bridge

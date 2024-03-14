@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pypoetry
+            ~/.cache/pip
+          key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: ${{ runner.os }}-poetry-
+
+      - uses: abatilo/actions-poetry@v3
+        with:
+          poetry-version: "1.8.0"
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: black
+        run: poetry run black --check app
+
+      - name: isort
+        run: poetry run isort --check-only app
+
+      - name: flake8
+        run: poetry run flake8 app
+
+  type-check:
+    name: Type Checking
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pypoetry
+            ~/.cache/pip
+          key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: ${{ runner.os }}-poetry-
+
+      - uses: abatilo/actions-poetry@v3
+        with:
+          poetry-version: "1.8.0"
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: mypy
+        run: poetry run mypy app
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pypoetry
+            ~/.cache/pip
+          key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: ${{ runner.os }}-poetry-
+
+      - uses: abatilo/actions-poetry@v3
+        with:
+          poetry-version: "1.8.0"
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: bandit
+        run: poetry run bandit -r app
+
+      - name: safety
+        run: poetry run safety check

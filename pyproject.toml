@@ -1,0 +1,116 @@
+[tool.poetry]
+name = "minecraft-manager-bot"
+version = "0.1.0"
+description = "Telegram bot for managing Minecraft servers running in Docker containers."
+authors = ["Zebaro <denok100100@gmail.com>"]
+readme = "README.md"
+package-mode = false
+
+# ---------------------------------------------------------------------------
+# Runtime dependencies
+# ---------------------------------------------------------------------------
+[tool.poetry.dependencies]
+python = ">=3.11,<3.15"
+
+# Telegram bot framework (async)
+aiogram = "^3.26"
+
+# Config from environment / .env file
+pydantic-settings = "^2.13"
+
+# Docker container management
+docker = "^7.1"
+
+# Minecraft server status pings
+mcstatus = "^13.0"
+
+# ---------------------------------------------------------------------------
+# Development dependencies
+# ---------------------------------------------------------------------------
+[tool.poetry.group.dev.dependencies]
+
+# Formatting
+black = "^26.3"
+isort = "^8.0"
+
+# Linting
+flake8 = "^7.3"
+flake8-bugbear = "^25.11"
+flake8-pyproject = "^1.2"
+
+# Type checking
+mypy = "^1.18"
+
+# Security scanning
+bandit = "^1.9"
+safety = "^3.6"
+
+# ===========================================================================
+# Tool configuration
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Black
+# ---------------------------------------------------------------------------
+[tool.black]
+line-length = 120
+target-version = ["py311"]
+extend-exclude = '''
+/(
+  \.git
+  | \.venv
+  | __pycache__
+  | build
+  | dist
+)/
+'''
+
+# ---------------------------------------------------------------------------
+# isort
+# ---------------------------------------------------------------------------
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 120
+known_first_party = ["app"]
+sections = ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
+
+# ---------------------------------------------------------------------------
+# Flake8
+# ---------------------------------------------------------------------------
+[tool.flake8]
+max-line-length = 120
+extend-ignore = ["E203", "W503"]
+exclude = [".git", "__pycache__", ".venv", "venv", "build", "dist"]
+per-file-ignores = ["__init__.py:F401"]
+
+# ---------------------------------------------------------------------------
+# MyPy
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+strict_equality = true
+show_error_codes = true
+disable_error_code = ["no-untyped-def", "import-untyped"]
+
+# ---------------------------------------------------------------------------
+# Bandit
+# ---------------------------------------------------------------------------
+[tool.bandit]
+exclude_dirs = [".venv", "__pycache__"]
+skips = ["B101"]
+
+# ---------------------------------------------------------------------------
+# Build system
+# ---------------------------------------------------------------------------
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
