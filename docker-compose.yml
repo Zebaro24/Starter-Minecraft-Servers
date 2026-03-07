@@ -38,7 +38,7 @@ services:
       TYPE: "FTBA"
       FTB_MODPACK_ID: "130"
       FTB_MODPACK_VERSION_ID: "100180"
-      MEMORY: "7G"
+      MEMORY: "6G"
       JAVA_VERSION: "21"
       # RCON — needed for sending in-game commands from the bot
       ENABLE_RCON: "true"
