@@ -83,6 +83,7 @@ jobs:
             docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
             
             export OWNER_NAME=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+            
             export TELEGRAM_BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
             export TELEGRAM_ADMIN_ID="${{ secrets.TELEGRAM_ADMIN_ID }}"
             export RCON_PASSWORD="${{ secrets.RCON_PASSWORD }}"

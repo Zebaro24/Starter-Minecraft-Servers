@@ -10,6 +10,10 @@ services:
     restart: unless-stopped
     networks:
       - mc-net
+    environment:
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
+      TELEGRAM_ADMIN_ID: "${TELEGRAM_ADMIN_ID}"
+      RCON_PASSWORD: "${RCON_PASSWORD}"
     volumes:
       # Mount the Docker socket so the bot can start/stop MC containers
       - /var/run/docker.sock:/var/run/docker.sock
