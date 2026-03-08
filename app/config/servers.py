@@ -21,6 +21,8 @@ class ServerConfig:
     container_name: str
     # Hostname for mcstatus pings and RCON — use Docker service name when on the same network
     host: str
+    # Public IP shown to players (without port) — e.g. "play.example.com"
+    public_ip: str = ""
     # Minecraft game port
     port: int = 25565
     # RCON port (enable with ENABLE_RCON=true in docker-compose)
@@ -35,9 +37,10 @@ class ServerConfig:
 SERVERS: list[ServerConfig] = [
     ServerConfig(
         id="stoneblock4",
-        name="StoneBlock 4",
+        name="⛏️ StoneBlock 4 🪨",
         container_name="mc-stoneblock4",
         host="mc-stoneblock4",  # Docker service name on the shared network
+        public_ip="mc1.zebaro.pp.ua",
         port=25565,
         rcon_port=25575,
     ),

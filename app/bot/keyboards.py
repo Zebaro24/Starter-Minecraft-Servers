@@ -22,27 +22,30 @@ def server_card_keyboard(config: ServerConfig, status: ServerStatus) -> InlineKe
 
     refresh_row = [
         InlineKeyboardButton(
-            text="Обновить",
+            text="🔄 Обновить",
             callback_data=cb(action="info", server_id=config.id).pack(),
+            style="primary",
         )
     ]
 
     if status == ServerStatus.RUNNING:
         action_row = [
             InlineKeyboardButton(
-                text="Остановить",
+                text="⛔ Остановить",
                 callback_data=cb(action="stop", server_id=config.id).pack(),
+                style="danger",
             ),
             InlineKeyboardButton(
-                text="RCON",
+                text="💬 RCON",
                 callback_data=cb(action="rcon", server_id=config.id).pack(),
             ),
         ]
     elif status == ServerStatus.STOPPED:
         action_row = [
             InlineKeyboardButton(
-                text="Запустить",
+                text="▶️ Запустить",
                 callback_data=cb(action="start", server_id=config.id).pack(),
+                style="success",
             ),
         ]
     else:
@@ -51,7 +54,7 @@ def server_card_keyboard(config: ServerConfig, status: ServerStatus) -> InlineKe
 
     back_row = [
         InlineKeyboardButton(
-            text="Назад",
+            text="◀️ Назад",
             callback_data=cb(action="back").pack(),
         )
     ]
@@ -66,5 +69,13 @@ def server_card_keyboard(config: ServerConfig, status: ServerStatus) -> InlineKe
 
 def cancel_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="Отмена", callback_data=ServerCallback(action="back").pack())]]
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="❌ Отмена",
+                    callback_data=ServerCallback(action="back").pack(),
+                    style="danger",
+                )
+            ]
+        ]
     )

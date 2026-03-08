@@ -1,3 +1,4 @@
+import asyncio
 import html
 import logging
 
@@ -36,37 +37,40 @@ class RconState(StatesGroup):
 
 def _status_line(status: ServerStatus) -> str:
     icons = {
-        ServerStatus.RUNNING: "Online",
-        ServerStatus.STOPPED: "Выключен",
-        ServerStatus.STARTING: "Запускается...",
-        ServerStatus.STOPPING: "Выключается...",
-        ServerStatus.UNKNOWN: "Неизвестно",
+        ServerStatus.RUNNING: "🟢 Работает",
+        ServerStatus.STOPPED: "🔴 Выключен",
+        ServerStatus.STARTING: "🟡 Запускается...",
+        ServerStatus.STOPPING: "🟠 Выключается...",
+        ServerStatus.UNKNOWN: "⚪ Неизвестно",
     }
-    badges = {
-        ServerStatus.RUNNING: "",
-        ServerStatus.STOPPED: "",
-        ServerStatus.STARTING: "",
-        ServerStatus.STOPPING: "",
-        ServerStatus.UNKNOWN: "",
-    }
-    return f"{badges[status]} {icons[status]}"
+    return icons[status]
 
 
 def _format_card(config: ServerConfig, info: ServerInfo) -> str:
+    name = html.escape(config.name)
     lines = [
-        f"<b>{html.escape(config.name)}</b>",
+        f"═══════╣ {name} ╠═══════",
         "",
-        f"<b>Статус:</b> {_status_line(info.status)}",
+        f"Статус: {_status_line(info.status)}",
     ]
 
     if info.status == ServerStatus.RUNNING:
-        lines.append(f"<b>Игроков:</b> {info.players_online} / {info.players_max}")
+        ip = config.public_ip or config.host
+        lines.append(f"🌐 IP: <code>{html.escape(ip)}</code>")
+        lines.append(f"👥 Игроков: {info.players_online} / {info.players_max}")
         if info.players:
             lines.append("")
             for i, player in enumerate(info.players, 1):
-                lines.append(f"  {i}. {html.escape(player.name)}")
+                lines.append(f"  {i}) {html.escape(player.name)}")
         else:
-            lines.append("<i>Никого нет на сервере</i>")
+            lines.append("<i>Никого нет на сервере 👻</i>")
+    elif info.status == ServerStatus.STARTING:
+        lines.append("")
+        lines.append("⏳ Сервер загружается, подожди немного...")
+        lines.append("Нажми 🔄 Обновить чтобы проверить готовность.")
+    elif info.status == ServerStatus.STOPPING:
+        lines.append("")
+        lines.append("⏳ Сервер выключается...")
 
     return "\n".join(lines)
 
@@ -100,6 +104,68 @@ def _is_admin(user_id: int) -> bool:
     return user_id == settings.telegram_admin_id
 
 
+def _user_display(user) -> str:
+    """Return a readable display name for a Telegram user."""
+    if not user:
+        return "Неизвестный"
+    parts = [user.first_name or ""]
+    if user.last_name:
+        parts.append(user.last_name)
+    name = " ".join(parts).strip() or user.username or str(user.id)
+    return name
+
+
+async def _wait_and_notify_started(
+    bot: Bot,
+    config: ServerConfig,
+    user_id: int,
+    user_name: str,
+) -> None:
+    """Background task: polls until server is RUNNING, then notifies user and admin."""
+    ip = config.public_ip or config.host
+    for _ in range(72):  # up to 6 minutes (72 * 5s)
+        await asyncio.sleep(5)
+        try:
+            info = await manager.get_server_info(config)
+        except Exception as exc:
+            logger.warning("Failed to get server info for %s: %s", config.id, exc)
+            continue
+
+        if info.status == ServerStatus.RUNNING:
+            # Notify the person who started it
+            text = (
+                f"✅ Сервер <b>{html.escape(config.name)}</b> запущен и готов к игре!\n\n"
+                f"🌐 IP: <code>{html.escape(ip)}</code>"
+            )
+            await bot.send_message(user_id, text, parse_mode="HTML")
+
+            # Notify admin separately (unless it was the admin who started it)
+            if user_id != settings.telegram_admin_id:
+                admin_text = (
+                    f"🚀 Стартовал сервер: <b>{html.escape(config.name)}</b>\n"
+                    f"Запущен игроком: <b>{html.escape(user_name)}</b>"
+                )
+                await bot.send_message(settings.telegram_admin_id, admin_text, parse_mode="HTML")
+            return
+
+        if info.status == ServerStatus.STOPPED:
+            # Container died unexpectedly
+            await bot.send_message(
+                user_id,
+                f"❌ Сервер <b>{html.escape(config.name)}</b> не смог запуститься. Обратись к администратору.",
+                parse_mode="HTML",
+            )
+            return
+
+    # Timeout
+    await bot.send_message(
+        user_id,
+        f"⚠️ Сервер <b>{html.escape(config.name)}</b> запускается дольше обычного.\n"
+        "Проверь статус чуть позже через кнопку 🔄 Обновить.",
+        parse_mode="HTML",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Reply keyboard: tap server name
 # ---------------------------------------------------------------------------
@@ -131,10 +197,6 @@ async def cb_info(callback: CallbackQuery, callback_data: ServerCallback, bot: B
 
 @router.callback_query(ServerCallback.filter(F.action == "start"))
 async def cb_start(callback: CallbackQuery, callback_data: ServerCallback, bot: Bot) -> None:
-    if not _is_admin(callback.from_user.id):
-        await callback.answer("Только администратор может запускать серверы.", show_alert=True)
-        return
-
     config = SERVERS_BY_ID.get(callback_data.server_id)
     if not config:
         await callback.answer("Сервер не найден.", show_alert=True)
@@ -142,57 +204,77 @@ async def cb_start(callback: CallbackQuery, callback_data: ServerCallback, bot: 
 
     if not isinstance(callback.message, Message):
         return
-    await callback.answer("Запускаю...")
+
+    await callback.answer("⏳ Запускаю...")
     success = manager.start(config)
 
     if success:
+        user_name = _user_display(callback.from_user)
         await bot.edit_message_text(
-            text=f"<b>{html.escape(config.name)}</b>\n\n "
-            f"Запускается... это может занять несколько минут.\n\n"
-            f"Нажми <b>Обновить</b> чтобы проверить статус.",
+            text=(
+                f"═══════╣ {html.escape(config.name)} ╠═══════\n\n"
+                f"🟡 Запускается...\n\n"
+                f"⏳ Это может занять несколько минут.\n"
+                f"Тебе придёт уведомление когда сервер будет готов! 🎮"
+            ),
             chat_id=callback.message.chat.id,
             message_id=callback.message.message_id,
             parse_mode="HTML",
             reply_markup=server_card_keyboard(config, ServerStatus.STARTING),
         )
+        # Fire background task — notify when ready
+        asyncio.create_task(_wait_and_notify_started(bot, config, callback.from_user.id, user_name))
     else:
-        await callback.answer("Не удалось запустить сервер. Проверь Docker.", show_alert=True)
+        await callback.answer("❌ Не удалось запустить сервер. Проверь Docker.", show_alert=True)
 
 
 @router.callback_query(ServerCallback.filter(F.action == "stop"))
 async def cb_stop(callback: CallbackQuery, callback_data: ServerCallback, bot: Bot) -> None:
-    if not _is_admin(callback.from_user.id):
-        await callback.answer("Только администратор может останавливать серверы.", show_alert=True)
-        return
-
     config = SERVERS_BY_ID.get(callback_data.server_id)
     if not config:
         await callback.answer("Сервер не найден.", show_alert=True)
         return
 
+    is_admin = _is_admin(callback.from_user.id)
+
+    if not is_admin:
+        # Regular users can only stop empty servers
+        info = await manager.get_server_info(config)
+        if info.players_online > 0:
+            player_list = ", ".join(p.name for p in info.players) if info.players else "?"
+            await callback.answer(
+                f"🚫 На сервере сейчас {info.players_online} игрок(ов):\n{player_list}\n\n"
+                "Выключить можно только когда сервер пуст 👻",
+                show_alert=True,
+            )
+            return
+
     if not isinstance(callback.message, Message):
         return
-    await callback.answer("Останавливаю...")
+    await callback.answer("⏳ Останавливаю...")
     success = manager.stop(config)
 
     if success:
         await bot.edit_message_text(
-            text=f"<b>{html.escape(config.name)}</b>\n\n "
-            f"Выключается... подожди немного.\n\n"
-            f"Нажми <b>Обновить</b> чтобы проверить статус.",
+            text=(
+                f"═══════╣ {html.escape(config.name)} ╠═══════\n\n"
+                f"🟠 Выключается...\n\n"
+                f"⏳ Подожди немного.\n"
+                f"Нажми 🔄 Обновить чтобы проверить статус."
+            ),
             chat_id=callback.message.chat.id,
             message_id=callback.message.message_id,
             parse_mode="HTML",
             reply_markup=server_card_keyboard(config, ServerStatus.STOPPING),
         )
     else:
-        await callback.answer("Не удалось остановить сервер. Проверь Docker.", show_alert=True)
+        await callback.answer("❌ Не удалось остановить сервер. Проверь Docker.", show_alert=True)
 
 
 @router.callback_query(ServerCallback.filter(F.action == "rcon"))
 async def cb_rcon(callback: CallbackQuery, callback_data: ServerCallback, state: FSMContext) -> None:
     if not _is_admin(callback.from_user.id):
-        await callback.answer("Только администратор может отправлять RCON команды.", show_alert=True)
+        await callback.answer("🔒 Только администратор может отправлять RCON команды.", show_alert=True)
         return
 
     config = SERVERS_BY_ID.get(callback_data.server_id)
@@ -208,7 +290,7 @@ async def cb_rcon(callback: CallbackQuery, callback_data: ServerCallback, state:
     await callback.answer()
 
     await callback.message.answer(
-        f"<b>RCON  {html.escape(config.name)}</b>\n\n"
+        f"💬 <b>RCON — {html.escape(config.name)}</b>\n\n"
         "Введи команду для отправки на сервер:\n"
         "<i>Примеры: time set day, list, weather clear, say Hello!</i>",
         parse_mode="HTML",
@@ -230,12 +312,12 @@ async def on_rcon_input(message: Message, state: FSMContext, bot: Bot) -> None:
     try:
         response = await manager.send_command(config, message.text)
         await message.answer(
-            f"<b>Ответ сервера:</b>\n<code>{html.escape(response)}</code>",
+            f"✅ <b>Ответ сервера:</b>\n<code>{html.escape(response)}</code>",
             parse_mode="HTML",
         )
     except RCONError as exc:
         await message.answer(
-            f"<b>Ошибка RCON:</b>\n<code>{html.escape(str(exc))}</code>",
+            f"❌ <b>Ошибка RCON:</b>\n<code>{html.escape(str(exc))}</code>",
             parse_mode="HTML",
         )
 
@@ -264,6 +346,6 @@ async def cb_back(callback: CallbackQuery, state: FSMContext) -> None:
 @router.message(F.text)
 async def on_unknown_text(message: Message) -> None:
     await message.answer(
-        "Выбери сервер из меню или воспользуйся /help.",
+        "🤔 Выбери сервер из меню или воспользуйся /help.",
         reply_markup=main_keyboard(),
     )
