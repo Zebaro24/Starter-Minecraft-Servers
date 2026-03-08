@@ -17,8 +17,6 @@ services:
     volumes:
       # Mount the Docker socket so the bot can start/stop MC containers
       - /var/run/docker.sock:/var/run/docker.sock
-    depends_on:
-      - mc-stoneblock4
 
   # ---------------------------------------------------------------------------
   # StoneBlock 4 (FTB modpack)
@@ -28,7 +26,7 @@ services:
   mc-stoneblock4:
     image: itzg/minecraft-server
     container_name: mc-stoneblock4
-    restart: unless-stopped
+    restart: "no"
     networks:
       - mc-net
     ports:
@@ -59,7 +57,7 @@ services:
   # mc-survival:
   #   image: itzg/minecraft-server
   #   container_name: mc-survival
-  #   restart: unless-stopped
+  #   restart: "no"
   #   networks:
   #     - mc-net
   #   ports:
