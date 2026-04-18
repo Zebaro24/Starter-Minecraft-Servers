@@ -65,7 +65,8 @@ SERVERS: list[ServerConfig] = [
         ),
         instructions=(
             "📦 <b>Как установить FTB StoneBlock 4 (v1.8.0)</b>\n\n"
-            "1. Скачай лаунчер CurseForge: <a href=\"https://www.curseforge.com/download/app\">curseforge.com/download/app</a>\n"
+            "1. Скачай лаунчер CurseForge: "
+            '<a href="https://www.curseforge.com/download/app">curseforge.com/download/app</a>\n'
             "2. Установи и запусти лаунчер, войди в аккаунт Minecraft\n"
             "3. Слева выбери <b>Minecraft</b> → <b>Browse Modpacks</b>\n"
             "4. В поиске введи <b>«FTB StoneBlock 4»</b>\n"

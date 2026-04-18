@@ -1,7 +1,7 @@
 import asyncio
+import http.client
 import logging
 import time
-import urllib.request
 
 import docker
 import docker.errors
@@ -24,8 +24,12 @@ _IP_CACHE_TTL: float = 300.0
 
 
 def _fetch_public_ip_sync() -> str:
-    with urllib.request.urlopen("https://api.ipify.org", timeout=5) as resp:  # noqa: S310
-        return resp.read().decode().strip()
+    conn = http.client.HTTPSConnection("api.ipify.org", timeout=5)
+    try:
+        conn.request("GET", "/")
+        return conn.getresponse().read().decode().strip()
+    finally:
+        conn.close()
 
 
 async def get_public_ip() -> str:
