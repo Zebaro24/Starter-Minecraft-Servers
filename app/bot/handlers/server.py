@@ -46,17 +46,20 @@ def _status_line(status: ServerStatus) -> str:
     return icons[status]
 
 
-def _format_card(config: ServerConfig, info: ServerInfo) -> str:
+def _format_card(config: ServerConfig, info: ServerInfo, display_ip: str) -> str:
     name = html.escape(config.name)
-    lines = [
-        f"═══════╣ {name} ╠═══════",
-        "",
-        f"Статус: {_status_line(info.status)}",
-    ]
+    lines: list[str] = [f"═══════╣ {name} ╠═══════"]
+
+    if config.description:
+        lines += ["", config.description]
+
+    lines += ["", f"Статус: {_status_line(info.status)}"]
+
+    has_public_address = bool(config.public_ip or config.subdomain or config.auto_public_ip)
+    if has_public_address and display_ip:
+        lines.append(f"🌐 IP: <code>{html.escape(display_ip)}</code>")
 
     if info.status == ServerStatus.RUNNING:
-        ip = config.public_ip or config.host
-        lines.append(f"🌐 IP: <code>{html.escape(ip)}</code>")
         lines.append(f"👥 Игроков: {info.players_online} / {info.players_max}")
         if info.players:
             lines.append("")
@@ -65,12 +68,13 @@ def _format_card(config: ServerConfig, info: ServerInfo) -> str:
         else:
             lines.append("<i>Никого нет на сервере 👻</i>")
     elif info.status == ServerStatus.STARTING:
-        lines.append("")
-        lines.append("⏳ Сервер загружается, подожди немного...")
-        lines.append("Нажми 🔄 Обновить чтобы проверить готовность.")
+        lines += [
+            "",
+            "⏳ Сервер загружается, подожди немного...",
+            "Нажми 🔄 Обновить чтобы проверить готовность.",
+        ]
     elif info.status == ServerStatus.STOPPING:
-        lines.append("")
-        lines.append("⏳ Сервер выключается...")
+        lines += ["", "⏳ Сервер выключается..."]
 
     return "\n".join(lines)
 
@@ -81,8 +85,11 @@ async def _render_card(
     chat_id: int,
     message_id: int | None = None,
 ) -> None:
-    info = await manager.get_server_info(config)
-    text = _format_card(config, info)
+    info, display_ip = await asyncio.gather(
+        manager.get_server_info(config),
+        manager.get_display_ip(config),
+    )
+    text = _format_card(config, info, display_ip)
     keyboard = server_card_keyboard(config, info.status)
 
     if message_id:
@@ -122,7 +129,7 @@ async def _wait_and_notify_started(
     user_name: str,
 ) -> None:
     """Background task: polls until server is RUNNING, then notifies user and admin."""
-    ip = config.public_ip or config.host
+    ip = await manager.get_display_ip(config)
     for _ in range(72):  # up to 6 minutes (72 * 5s)
         await asyncio.sleep(5)
         try:
@@ -269,6 +276,25 @@ async def cb_stop(callback: CallbackQuery, callback_data: ServerCallback, bot: B
         )
     else:
         await callback.answer("❌ Не удалось остановить сервер. Проверь Docker.", show_alert=True)
+
+
+@router.callback_query(ServerCallback.filter(F.action == "guide"))
+async def cb_guide(callback: CallbackQuery, callback_data: ServerCallback) -> None:
+    config = SERVERS_BY_ID.get(callback_data.server_id)
+    if not config:
+        await callback.answer("Сервер не найден.", show_alert=True)
+        return
+    if not config.instructions:
+        await callback.answer("Инструкции не настроены.", show_alert=True)
+        return
+    await callback.answer()
+    if not isinstance(callback.message, Message):
+        return
+    await callback.message.answer(
+        f"📖 <b>Инструкции — {html.escape(config.name)}</b>\n\n{config.instructions}",
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+    )
 
 
 @router.callback_query(ServerCallback.filter(F.action == "rcon"))

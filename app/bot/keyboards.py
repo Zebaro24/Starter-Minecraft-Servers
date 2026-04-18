@@ -6,7 +6,7 @@ from app.servers.models import ServerStatus
 
 
 class ServerCallback(CallbackData, prefix="srv"):
-    action: str  # info | start | stop | rcon | back
+    action: str  # info | start | stop | rcon | guide | back
     server_id: str = ""
 
 
@@ -52,6 +52,17 @@ def server_card_keyboard(config: ServerConfig, status: ServerStatus) -> InlineKe
         # STARTING / STOPPING / UNKNOWN — only refresh available
         action_row = []
 
+    guide_row = (
+        [
+            InlineKeyboardButton(
+                text="📖 Инструкции",
+                callback_data=cb(action="guide", server_id=config.id).pack(),
+            )
+        ]
+        if config.instructions
+        else []
+    )
+
     back_row = [
         InlineKeyboardButton(
             text="◀️ Назад",
@@ -62,6 +73,8 @@ def server_card_keyboard(config: ServerConfig, status: ServerStatus) -> InlineKe
     rows = [refresh_row]
     if action_row:
         rows.append(action_row)
+    if guide_row:
+        rows.append(guide_row)
     rows.append(back_row)
 
     return InlineKeyboardMarkup(inline_keyboard=rows)

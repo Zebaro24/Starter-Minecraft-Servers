@@ -1,14 +1,47 @@
+import asyncio
 import logging
+import time
+import urllib.request
 
 import docker
 import docker.errors
 from mcstatus import JavaServer
 
 from app.config.servers import ServerConfig
+from app.config.settings import settings
 from app.servers.models import PlayerInfo, ServerInfo, ServerStatus
 from app.servers.rcon import send_rcon_command
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Public IP resolution (cached)
+# ---------------------------------------------------------------------------
+
+_cached_public_ip: str = ""
+_cache_expiry: float = 0.0
+_IP_CACHE_TTL: float = 300.0
+
+
+def _fetch_public_ip_sync() -> str:
+    with urllib.request.urlopen("https://api.ipify.org", timeout=5) as resp:  # noqa: S310
+        return resp.read().decode().strip()
+
+
+async def get_public_ip() -> str:
+    """Return the server's public IP, cached for 5 minutes."""
+    global _cached_public_ip, _cache_expiry
+    if _cached_public_ip and time.monotonic() < _cache_expiry:
+        return _cached_public_ip
+    loop = asyncio.get_event_loop()
+    try:
+        ip: str = await loop.run_in_executor(None, _fetch_public_ip_sync)
+        _cached_public_ip = ip
+        _cache_expiry = time.monotonic() + _IP_CACHE_TTL
+        return ip
+    except Exception as exc:
+        logger.warning("Failed to fetch public IP: %s", exc)
+        return _cached_public_ip
 
 
 class DockerServerManager:
@@ -108,6 +141,21 @@ class DockerServerManager:
         except Exception:
             # Container is up but MC hasn't loaded yet
             return ServerInfo(status=ServerStatus.STARTING)
+
+    async def get_display_ip(self, config: ServerConfig) -> str:
+        """
+        Resolve the public-facing address for a server.
+
+        Priority: public_ip → subdomain+base_domain → auto-detected IP → internal host.
+        """
+        if config.public_ip:
+            return config.public_ip
+        if config.subdomain:
+            base = settings.base_domain
+            return f"{config.subdomain}.{base}" if base else config.subdomain
+        if config.auto_public_ip:
+            return await get_public_ip()
+        return config.host
 
     # ------------------------------------------------------------------
     # RCON
